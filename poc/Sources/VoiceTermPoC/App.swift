@@ -335,6 +335,7 @@ struct ContentView: View {
             Button("🎤 聞く") { coord.hotkeyListenNext() }.help("⌃⌥R（グローバル）")
             Text(coord.status).foregroundColor(.cyan).lineLimit(1)
             Spacer()
+            Button("🅖 Ghostty試") { openGhosttyTest() }.help("libghostty .exec スパイク")
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
     }

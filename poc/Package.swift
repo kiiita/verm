@@ -14,6 +14,7 @@ let package = Package(
             dependencies: [
                 "SwiftTerm",
                 .product(name: "GhosttyKit", package: "libghostty-spm"),
+                .product(name: "GhosttyTerminal", package: "libghostty-spm"),
             ]
         )
     ]
