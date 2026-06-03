@@ -1,0 +1,10 @@
+# SwiftPM build output (large; includes the libghostty xcframework artifact)
+.build/
+.swiftpm/
+
+# Build artifacts
+*.app/
+DerivedData/
+
+# macOS
+.DS_Store
