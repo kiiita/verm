@@ -7,6 +7,7 @@ import GhosttyTerminal
 protocol TermBackend: AnyObject {
     var nsView: NSView { get }
     func sendText(_ s: String)
+    func sendEnter()                    // submit (a real Enter, not a literal newline)
     var onTitle: ((String) -> Void)? { get set }
     var onExit: (() -> Void)? { get set }
     var onFocus: (() -> Void)? { get set }
@@ -21,6 +22,7 @@ final class SwiftTermBackend: NSObject, TermBackend, LocalProcessTerminalViewDel
     var onFocus: (() -> Void)?
     var nsView: NSView { term }
     func sendText(_ s: String) { term.send(txt: s) }
+    func sendEnter() { term.send(txt: "\r") }
 
     init(cwd: String?, paneID: UUID) {
         term = LocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
@@ -53,6 +55,17 @@ final class GhosttyBackend: NSObject, TermBackend, TerminalSurfaceViewDelegate {
     var onFocus: (() -> Void)?
     var nsView: NSView { view }
     func sendText(_ s: String) { view.sendText(s) }
+    // libghostty treats sendText("\r") as a literal newline, so submit by
+    // synthesizing a real Return key event (-> ghostty_surface_key).
+    func sendEnter() {
+        let ev = NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: view.window?.windowNumber ?? 0, context: nil,
+            characters: "\r", charactersIgnoringModifiers: "\r",
+            isARepeat: false, keyCode: 36)
+        if let ev = ev { view.keyDown(with: ev) } else { view.sendText("\r") }
+    }
 
     init(cwd: String?, paneID: UUID) {
         // Inject the voice-loop env vars via env(1), then exec the login shell.

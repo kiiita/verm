@@ -33,6 +33,7 @@ final class Pane: ObservableObject, Identifiable {
         backend.onExit = { [weak self] in guard let s = self else { return }; s.onExit?(s.id) }
     }
     func send(text: String) { backend.sendText(text) }
+    func sendEnter() { backend.sendEnter() }
 }
 
 // MARK: - Layout tree (binary, recursive)
