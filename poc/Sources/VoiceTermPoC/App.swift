@@ -12,34 +12,27 @@ typealias Color = SwiftUI.Color
 // awaiting a voice reply surfaces as a "返信待ち" status in the sidebar (cmux's
 // "Needs input" analogue).
 
-// MARK: - Pane (one PTY)
+// MARK: - Pane (one terminal, SwiftTerm or libghostty backend)
 
-final class Pane: NSObject, ObservableObject, Identifiable, LocalProcessTerminalViewDelegate {
+final class Pane: ObservableObject, Identifiable {
     let id = UUID()
-    let term: LocalProcessTerminalView
+    let backend: TermBackend
     @Published var title = "zsh"
     var onFocus: ((UUID) -> Void)?
     var onExit: ((UUID) -> Void)?
+    var term: NSView { backend.nsView }
 
-    init(cwd: String?) {
-        term = LocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
-        super.init()
-        term.processDelegate = self
-        let click = NSClickGestureRecognizer(target: self, action: #selector(handleClick))
-        click.delaysPrimaryMouseButtonEvents = false
-        term.addGestureRecognizer(click)
-        var env: [String] = []
-        for (k, v) in ProcessInfo.processInfo.environment where k != "TERM" { env.append("\(k)=\(v)") }
-        env.append("TERM=xterm-256color")
-        env.append("VOICETERM_PANE=\(id.uuidString)")
-        env.append("VOICETERM_EVENTS=\(VoiceCoordinator.eventsDir.path)")
-        term.startProcess(executable: "/bin/zsh", args: ["-l"], environment: env, currentDirectory: cwd)
+    init(cwd: String?, ghostty: Bool) {
+        let pid = id
+        backend = MainActor.assumeIsolated { () -> TermBackend in
+            if ghostty { return GhosttyBackend(cwd: cwd, paneID: pid) }
+            return SwiftTermBackend(cwd: cwd, paneID: pid)
+        }
+        backend.onTitle = { [weak self] t in self?.title = t }
+        backend.onFocus = { [weak self] in guard let s = self else { return }; s.onFocus?(s.id) }
+        backend.onExit = { [weak self] in guard let s = self else { return }; s.onExit?(s.id) }
     }
-    @objc private func handleClick() { onFocus?(id) }
-    func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
-    func setTerminalTitle(source: LocalProcessTerminalView, title: String) { self.title = title.isEmpty ? "zsh" : title }
-    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
-    func processTerminated(source: TerminalView, exitCode: Int32?) { onExit?(id) }
+    func send(text: String) { backend.sendText(text) }
 }
 
 // MARK: - Layout tree (binary, recursive)
@@ -85,6 +78,7 @@ final class Session: ObservableObject {
     @Published var workspaces: [Workspace] = []
     @Published var activeWorkspaceID = UUID()
     @Published var sidebarVisible = true
+    @Published var useGhostty = false      // backend for newly created panes
     @Published var focusedPaneID: UUID? {
         didSet {  // keep the active workspace following the focused pane (reveal)
             if let id = focusedPaneID, let w = workspace(ofPane: id), w.id != activeWorkspaceID {
@@ -111,7 +105,7 @@ final class Session: ObservableObject {
     func workspace(ofPane id: UUID) -> Workspace? { workspaces.first { $0.paneIDs().contains(id) } }
 
     private func makePane() -> Pane {
-        let p = Pane(cwd: nil)
+        let p = Pane(cwd: nil, ghostty: useGhostty)
         p.onFocus = { [weak self] pid in self?.focusedPaneID = pid }
         p.onExit = { [weak self] pid in self?.handleExit(pid) }
         return p
@@ -189,8 +183,8 @@ final class Session: ObservableObject {
 
 struct TerminalRepresentable: NSViewRepresentable {
     let pane: Pane
-    func makeNSView(context: Context) -> LocalProcessTerminalView { pane.term }
-    func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {}
+    func makeNSView(context: Context) -> NSView { pane.backend.nsView }
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 struct PaneContainer: View {
@@ -330,6 +324,7 @@ struct ContentView: View {
             Button("分割 |") { session.splitFocused(.horizontal) }.help("⌘D")
             Button("分割 —") { session.splitFocused(.vertical) }.help("⌘⇧D")
             Button("ズーム") { session.toggleZoom() }.help("⌘⇧↩")
+            Toggle("Ghostty", isOn: $session.useGhostty).toggleStyle(.switch).help("新規ペインを libghostty で起動")
             Divider().frame(height: 16)
             Toggle("単独時自動", isOn: $coord.autoListenSingle).toggleStyle(.switch)
             Button("🎤 聞く") { coord.hotkeyListenNext() }.help("⌃⌥R（グローバル）")

@@ -224,8 +224,8 @@ final class VoiceCoordinator: NSObject, ObservableObject, AVAudioPlayerDelegate 
 
     private func submit(_ pane: UUID, _ text: String) {
         guard let p = session?.pane(uuid: pane.uuidString) else { return }
-        p.term.send(txt: text)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { p.term.send(txt: "\r") }
+        p.send(text: text)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { p.send(text: "\r") }
     }
 
     // MARK: TTS
