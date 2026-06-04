@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "VoiceTermPoC",
+    name: "Verm",
     platforms: [.macOS(.v14)],
     dependencies: [
         .package(url: "https://github.com/migueldeicaza/SwiftTerm", from: "1.2.0"),
@@ -10,7 +10,7 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "VoiceTermPoC",
+            name: "Verm",
             dependencies: [
                 "SwiftTerm",
                 .product(name: "GhosttyKit", package: "libghostty-spm"),

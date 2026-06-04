@@ -516,7 +516,7 @@ struct ContentView: View {
 }
 
 @main
-struct VoiceTermApp: App {
+struct VermApp: App {
     var body: some Scene {
         WindowGroup { ContentView() }
     }

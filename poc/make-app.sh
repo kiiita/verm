@@ -1,25 +1,36 @@
 #!/bin/bash
-# Build the PoC and assemble a proper .app bundle.
+# Build Verm and assemble a proper .app bundle.
 # A real bundle with NSMicrophoneUsageDescription is what lets macOS grant the
-# mic (the wall cmux hit). Ad-hoc codesign is enough for local use.
+# mic (the wall cmux hit).
+#
+# Signing: we sign with a STABLE Apple Development identity (not ad-hoc). macOS
+# TCC keys the mic grant off the code signature's designated requirement
+# (Team ID + bundle id). Ad-hoc signing produces a fresh cdhash every build, so
+# the grant was re-prompted on every rebuild. A stable identity keeps the same
+# designated requirement across rebuilds -> grant the mic once, it sticks.
+# (Hardened runtime is intentionally NOT enabled here: it would require the
+#  audio-input entitlement to avoid blocking the mic. That belongs in the
+#  Developer ID / notarized distribution build — see docs/PRODUCTION_READINESS.md.)
 set -euo pipefail
 DIR="/Users/kiiita/Dev/verm/poc"
-APP="$DIR/VoiceTerm.app"
+APP="$DIR/Verm.app"
+SIGN_ID="935AC99AFA6CD594FBE30D12B0B705474B0392DE"  # Apple Development: Yuto Kitakuni (3WYWE9BR5N)
 
 swift build --package-path "$DIR" -c release
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
-cp "$DIR/.build/release/VoiceTermPoC" "$APP/Contents/MacOS/VoiceTerm"
+cp "$DIR/.build/release/Verm" "$APP/Contents/MacOS/Verm"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleExecutable</key><string>VoiceTerm</string>
-  <key>CFBundleIdentifier</key><string>com.kiiita.voiceterm.poc</string>
-  <key>CFBundleName</key><string>VoiceTerm PoC</string>
+  <key>CFBundleExecutable</key><string>Verm</string>
+  <key>CFBundleIdentifier</key><string>com.kiiita.verm</string>
+  <key>CFBundleName</key><string>Verm</string>
+  <key>CFBundleDisplayName</key><string>Verm</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>0.1</string>
   <key>CFBundleVersion</key><string>1</string>
@@ -27,7 +38,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
-  <key>NSMicrophoneUsageDescription</key><string>音声入力ループのPoCでマイクを使用します。</string>
+  <key>NSMicrophoneUsageDescription</key><string>音声入力ループでマイクを使用します。</string>
 </dict>
 </plist>
 PLIST
@@ -45,5 +56,5 @@ mkdir -p "$RDST"
 # App icon
 [ -f "$DIR/Icon/AppIcon.icns" ] && cp "$DIR/Icon/AppIcon.icns" "$RDST/AppIcon.icns"
 
-codesign --force --sign - "$APP"
+codesign --force --sign "$SIGN_ID" "$APP"
 echo "built: $APP"

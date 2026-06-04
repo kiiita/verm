@@ -37,22 +37,35 @@ green.withAlphaComponent(0.45).setStroke()
 border.lineWidth = size * 0.012
 border.stroke()
 
-// prompt chevron (dim) + "V_" (bright), monospaced
-let promptFont = NSFont.monospacedSystemFont(ofSize: size * 0.30, weight: .heavy)
-let mainFont = NSFont.monospacedSystemFont(ofSize: size * 0.42, weight: .heavy)
+// A downward chevron (∨) — a "V"-shaped arrow — plus an underscore cursor.
+_ = greenDim
+green.setStroke()
+green.setFill()
 
-let prompt = NSAttributedString(string: "›", attributes: [.font: promptFont, .foregroundColor: greenDim])
-let main = NSAttributedString(string: "V_", attributes: [.font: mainFont, .foregroundColor: green])
-
-let pSize = prompt.size()
-let mSize = main.size()
-let gap = size * 0.03
-let totalW = pSize.width + gap + mSize.width
+let strokeW = size * 0.090
+let chW = size * 0.30        // chevron width
+let chH = size * 0.25        // chevron height
+let uW  = size * 0.17        // underscore width
+let uH  = size * 0.075       // underscore thickness
+let gap = size * 0.055
+let totalW = chW + gap + uW
 let startX = (size - totalW) / 2
-let midY = size * 0.5
+let cy = size * 0.52
+let topY = cy + chH / 2
+let botY = cy - chH / 2
 
-prompt.draw(at: NSPoint(x: startX, y: midY - pSize.height / 2))
-main.draw(at: NSPoint(x: startX + pSize.width + gap, y: midY - mSize.height / 2))
+let chev = NSBezierPath()
+chev.move(to: NSPoint(x: startX, y: topY))
+chev.line(to: NSPoint(x: startX + chW / 2, y: botY))
+chev.line(to: NSPoint(x: startX + chW, y: topY))
+chev.lineWidth = strokeW
+chev.lineCapStyle = .round
+chev.lineJoinStyle = .round
+chev.stroke()
+
+// underscore, baseline-aligned with the chevron's apex
+let uRect = NSRect(x: startX + chW + gap, y: botY, width: uW, height: uH)
+NSBezierPath(roundedRect: uRect, xRadius: uH / 2, yRadius: uH / 2).fill()
 
 img.unlockFocus()
 
