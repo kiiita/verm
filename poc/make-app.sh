@@ -31,5 +31,15 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
+# Bundle Ghostty resources (terminfo + shell-integration) so libghostty can load
+# shell integration and report the working directory (OSC 7) -> live tab titles.
+# Sourced from cmux's bundle (Ghostty's MIT resources, version-matched).
+GRES="/Applications/cmux.app/Contents/Resources"
+RDST="$APP/Contents/Resources"
+mkdir -p "$RDST"
+[ -d "$GRES/terminfo" ]      && cp -R "$GRES/terminfo" "$RDST/"
+[ -d "$GRES/ghostty" ]       && cp -R "$GRES/ghostty" "$RDST/"
+[ -f "$GRES/xterm-ghostty" ] && cp "$GRES/xterm-ghostty" "$RDST/"
+
 codesign --force --sign - "$APP"
 echo "built: $APP"

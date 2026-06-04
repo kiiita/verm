@@ -72,12 +72,41 @@ final class GhosttyBackend: NSObject, TermBackend, TerminalSurfaceViewDelegate {
         if let ev = ev { view.keyDown(with: ev) } else { view.sendText("\r") }
     }
 
+    // A wrapper ZDOTDIR that loads the user's real zsh config, then adds a precmd
+    // emitting OSC 0 (title) = current-directory name -> Ghostty's title delegate
+    // -> tab title. (The trimmed libghostty doesn't inject Ghostty's own shell
+    // integration, so we drive the cwd->title ourselves.)
+    private static var zdotReady = false
+    static func setupZDotDir() -> String {
+        let home = NSHomeDirectory()
+        let dir = (home as NSString).appendingPathComponent(".voiceterm/zdotdir")
+        if zdotReady { return dir }
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        func w(_ name: String, _ s: String) {
+            try? s.write(toFile: (dir as NSString).appendingPathComponent(name), atomically: true, encoding: .utf8)
+        }
+        w(".zshenv", "[ -f \"$VERM_REAL_ZDOTDIR/.zshenv\" ] && source \"$VERM_REAL_ZDOTDIR/.zshenv\"\n")
+        w(".zprofile", "[ -f \"$VERM_REAL_ZDOTDIR/.zprofile\" ] && source \"$VERM_REAL_ZDOTDIR/.zprofile\"\n")
+        w(".zlogin", "[ -f \"$VERM_REAL_ZDOTDIR/.zlogin\" ] && source \"$VERM_REAL_ZDOTDIR/.zlogin\"\n")
+        w(".zshrc",
+          "[ -f \"$VERM_REAL_ZDOTDIR/.zshrc\" ] && source \"$VERM_REAL_ZDOTDIR/.zshrc\"\n" +
+          "_verm_title() { print -Pn \"\\e]0;${PWD:t}\\a\" }\n" +
+          "typeset -ag precmd_functions\n" +
+          "precmd_functions+=(_verm_title)\n_verm_title\n")
+        zdotReady = true
+        return dir
+    }
+
     init(cwd: String?, paneID: UUID) {
-        // Inject the voice-loop env vars via env(1), then exec the login shell.
         let events = VoiceCoordinator.eventsDir.path
-        let cmd = "/usr/bin/env VOICETERM_PANE=\(paneID.uuidString) VOICETERM_EVENTS=\(events) /bin/zsh -l"
+        let zdir = GhosttyBackend.setupZDotDir()
+        let real = ProcessInfo.processInfo.environment["ZDOTDIR"] ?? NSHomeDirectory()
         let c = TerminalController { b in
-            b.withCustom("command", cmd)
+            b.withCustom("command", "/bin/zsh -l")
+            b.withCustom("env", "ZDOTDIR=\(zdir)")
+            b.withCustom("env", "VERM_REAL_ZDOTDIR=\(real)")
+            b.withCustom("env", "VOICETERM_PANE=\(paneID.uuidString)")
+            b.withCustom("env", "VOICETERM_EVENTS=\(events)")
             if let cwd = cwd { b.withCustom("working-directory", cwd) }
             b.withBackground("#0d1117")
             b.withForeground("#e6edf3")

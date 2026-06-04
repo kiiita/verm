@@ -454,6 +454,13 @@ struct ContentView: View {
                 Button(action: { session.sidebarVisible.toggle() }) { Image(systemName: "sidebar.left") }
                     .help("サイドバー ⌘B")
             }
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: { coord.ttsEnabled.toggle() }) {
+                    Image(systemName: coord.ttsEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                        .foregroundColor(coord.ttsEnabled ? Color.vermGreen : .secondary)
+                }
+                .help(coord.ttsEnabled ? "読み上げ ON（クリックでミュート）" : "読み上げ OFF（クリックで有効）")
+            }
         }
         .onAppear {
             coord.start(session: session)

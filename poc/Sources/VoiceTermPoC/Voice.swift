@@ -19,6 +19,7 @@ final class VoiceCoordinator: NSObject, ObservableObject, AVAudioPlayerDelegate 
 
     @Published var status = "待機"
     @Published var autoListenSingle = true       // mode (a): auto-listen only when it's the only pending one
+    @Published var ttsEnabled = true             // read-outs on/off (toggle for meetings)
     @Published var pending: [Pending] = []
     @Published var listeningPaneID: UUID?
 
@@ -40,8 +41,7 @@ final class VoiceCoordinator: NSObject, ObservableObject, AVAudioPlayerDelegate 
     private var vadStart = Date()
     private var lastVoice = Date()
     private var currentAudioURL: URL?
-    private var dHotKey: HotKey?   // ⌃D global: start next reply (claimed only while pending)
-    private var sHotKey: HotKey?   // ⌃S global: pause TTS / finish listen (claimed only while active)
+    private var bHotKey: HotKey?   // ⌃B global: toggle voice (claimed only while pending/listening)
 
     private let speechThreshold: Float = -38
     private let trailingSilence: TimeInterval = 1.6
@@ -61,18 +61,13 @@ final class VoiceCoordinator: NSObject, ObservableObject, AVAudioPlayerDelegate 
     // ⌃D / ⌃S are claimed GLOBALLY (Carbon) only while there's voice work, so
     // they work from any frontmost app yet stay free for terminals otherwise.
     private func updateGlobalHotkeys() {
-        let wantD = !pending.isEmpty && micHolder == nil
-        if wantD, dHotKey == nil {
-            dHotKey = HotKey(keyCode: UInt32(kVK_ANSI_D), modifiers: UInt32(controlKey)) { [weak self] in self?.hotkeyListenNext() }
-        } else if !wantD, let d = dHotKey { d.invalidate(); dHotKey = nil }
-
-        let wantS = speakingNow || micHolder != nil
-        if wantS, sHotKey == nil {
-            sHotKey = HotKey(keyCode: UInt32(kVK_ANSI_S), modifiers: UInt32(controlKey)) { [weak self] in self?.ctrlS() }
-        } else if !wantS, let s = sHotKey { s.invalidate(); sHotKey = nil }
+        let want = !pending.isEmpty || micHolder != nil
+        if want, bHotKey == nil {
+            bHotKey = HotKey(keyCode: UInt32(kVK_ANSI_B), modifiers: UInt32(controlKey)) { [weak self] in self?.ctrlB() }
+        } else if !want, let b = bHotKey { b.invalidate(); bHotKey = nil }
     }
-    private func ctrlS() {
-        if speakingNow { toggleTTSPause() } else if micHolder != nil { stopCurrentListen() }
+    private func ctrlB() {   // toggle: stop if listening, else start the next reply
+        if micHolder != nil { stopCurrentListen() } else { hotkeyListenNext() }
     }
 
     // MARK: ingest + TTS
@@ -110,7 +105,8 @@ final class VoiceCoordinator: NSObject, ObservableObject, AVAudioPlayerDelegate 
     }
 
     private func didFinishSpeaking(pane: UUID, summary: String) {
-        if autoListenSingle && pending.isEmpty && micHolder == nil {
+        // Muted (read-outs off): stay fully silent — no auto-listen, just queue.
+        if ttsEnabled && autoListenSingle && pending.isEmpty && micHolder == nil {
             beginListen(pane)
         } else {
             addPending(pane, summary)
@@ -122,8 +118,8 @@ final class VoiceCoordinator: NSObject, ObservableObject, AVAudioPlayerDelegate 
         if !pending.contains(where: { $0.id == pane }) {
             pending.append(Pending(id: pane, label: p.title, summary: String(summary.prefix(40))))
         }
-        status = "返信待ち \(pending.count) 件（⌃⌥R で次へ）"
-        NSSound(named: NSSound.Name("Tink"))?.play()
+        status = "返信待ち \(pending.count) 件（⌃B で返信）"
+        if ttsEnabled { NSSound(named: NSSound.Name("Tink"))?.play() }
     }
 
     // MARK: listen triggers
@@ -245,6 +241,7 @@ final class VoiceCoordinator: NSObject, ObservableObject, AVAudioPlayerDelegate 
 
     // MARK: TTS
     private func speak(_ text: String, done: @escaping () -> Void) {
+        guard ttsEnabled else { done(); return }   // read-outs muted -> straight to "返信待ち"
         guard let key = apiKey() else { done(); return }
         let mp3 = tmp.appendingPathComponent("vt_tts.mp3")
         let body: [String: Any] = [
