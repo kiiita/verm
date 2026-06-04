@@ -156,7 +156,8 @@ final class VoiceCoordinator: NSObject, ObservableObject, AVAudioPlayerDelegate 
         guard let p = session?.pane(uuid: pane.uuidString) else { return }
         micHolder = pane
         listeningPaneID = pane
-        session?.focusedPaneID = pane
+        // NOTE: do NOT change session.focusedPaneID / active workspace+tab here —
+        // injection goes straight to the target pane; never steal the user's view.
         pill.model.targetLabel = p.title
         pill.model.targetColor = color(for: pane)
         pill.model.phase = .listening
