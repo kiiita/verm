@@ -1,6 +1,13 @@
 import AppKit
 import SwiftUI
 
+// GitHub-contribution / terminal greens (geeky developer vibe).
+extension Color {
+    static let vermGreen     = Color(red: 0.224, green: 0.827, blue: 0.325) // #39d353 bright
+    static let vermGreenDim  = Color(red: 0.149, green: 0.651, blue: 0.255) // #26a641
+    static let vermGreenSoft = Color(red: 0.608, green: 0.914, blue: 0.659) // #9be9a8
+}
+
 // Aqua-Voice-style floating pill shown while listening: cancel / status dot /
 // live waveform / target-session label / stop. Floats over other apps without
 // stealing focus.
@@ -68,10 +75,10 @@ struct PillView: View {
     private var statusColor: Color {
         switch model.phase {
         case .idle: return .gray
-        case .listening: return .cyan
-        case .recording: return .red
-        case .transcribing: return .yellow
-        case .sending: return .green
+        case .listening: return .vermGreenDim
+        case .recording: return .vermGreen
+        case .transcribing: return .vermGreenSoft
+        case .sending: return .vermGreen
         }
     }
 }

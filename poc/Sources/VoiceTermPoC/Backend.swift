@@ -11,6 +11,7 @@ protocol TermBackend: AnyObject {
     var onTitle: ((String) -> Void)? { get set }
     var onExit: (() -> Void)? { get set }
     var onFocus: (() -> Void)? { get set }
+    var onCwd: ((String) -> Void)? { get set }   // working-directory updates (tab title)
 }
 
 // MARK: - SwiftTerm backend (pure-Swift, default)
@@ -20,6 +21,7 @@ final class SwiftTermBackend: NSObject, TermBackend, LocalProcessTerminalViewDel
     var onTitle: ((String) -> Void)?
     var onExit: (() -> Void)?
     var onFocus: (() -> Void)?
+    var onCwd: ((String) -> Void)?
     var nsView: NSView { term }
     func sendText(_ s: String) { term.send(txt: s) }
     func sendEnter() { term.send(txt: "\r") }
@@ -41,7 +43,9 @@ final class SwiftTermBackend: NSObject, TermBackend, LocalProcessTerminalViewDel
     @objc private func handleClick() { onFocus?() }
     func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
     func setTerminalTitle(source: LocalProcessTerminalView, title: String) { onTitle?(title.isEmpty ? "zsh" : title) }
-    func hostCurrentDirectoryUpdate(source: SwiftTerm.TerminalView, directory: String?) {}
+    func hostCurrentDirectoryUpdate(source: SwiftTerm.TerminalView, directory: String?) {
+        if let d = directory { onCwd?(d) }
+    }
     func processTerminated(source: SwiftTerm.TerminalView, exitCode: Int32?) { onExit?() }
 }
 
@@ -53,6 +57,7 @@ final class GhosttyBackend: NSObject, TermBackend, TerminalSurfaceViewDelegate {
     var onTitle: ((String) -> Void)?
     var onExit: (() -> Void)?
     var onFocus: (() -> Void)?
+    var onCwd: ((String) -> Void)?
     var nsView: NSView { view }
     func sendText(_ s: String) { view.sendText(s) }
     // libghostty treats sendText("\r") as a literal newline, so submit by
@@ -87,4 +92,5 @@ final class GhosttyBackend: NSObject, TermBackend, TerminalSurfaceViewDelegate {
     func terminalDidChangeTitle(_ title: String) { onTitle?(title.isEmpty ? "zsh" : title) }
     func terminalDidChangeFocus(_ focused: Bool) { if focused { onFocus?() } }
     func terminalDidClose(processAlive: Bool) { onExit?() }
+    func terminalDidChangeWorkingDirectory(_ path: String) { onCwd?(path) }
 }

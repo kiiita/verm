@@ -27,6 +27,12 @@ final class Pane: ObservableObject, Identifiable {
             return SwiftTermBackend(cwd: cwd, paneID: pid)
         }
         backend.onTitle = { [weak self] t in self?.title = t }
+        backend.onCwd = { [weak self] path in
+            var p = path
+            if p.hasPrefix("file://") { p = URL(string: p)?.path ?? p }
+            let name = (p as NSString).lastPathComponent
+            self?.title = name.isEmpty ? p : name
+        }
         backend.onFocus = { [weak self] in guard let s = self else { return }; s.onFocus?(s.id) }
         backend.onExit = { [weak self] in guard let s = self else { return }; s.onExit?(s.id) }
     }
@@ -64,6 +70,7 @@ final class LayoutNode: ObservableObject, Identifiable {
 final class WSTab: ObservableObject, Identifiable {
     let id = UUID()
     @Published var root: LayoutNode
+    @Published var customTitle: String?     // user-set name; overrides the auto cwd title
     init(root: LayoutNode) { self.root = root }
 }
 
@@ -151,6 +158,15 @@ final class Session: ObservableObject {
         if w.activeTabID == tabID { w.activeTabID = w.tabs.last!.id }
         w.objectWillChange.send()
         if let t = w.activeTab, let p = t.root.allPanes().first { focusedPaneID = p.id }
+    }
+
+    func nextTab() {
+        guard let w = active, w.tabs.count > 1, let i = w.tabs.firstIndex(where: { $0.id == w.activeTabID }) else { return }
+        selectTab(w.tabs[(i + 1) % w.tabs.count].id)
+    }
+    func prevTab() {
+        guard let w = active, w.tabs.count > 1, let i = w.tabs.firstIndex(where: { $0.id == w.activeTabID }) else { return }
+        selectTab(w.tabs[(i - 1 + w.tabs.count) % w.tabs.count].id)
     }
 
     func selectWorkspace(_ id: UUID) {
@@ -252,10 +268,20 @@ struct TabChip: View {
     @ObservedObject var titlePane: Pane
     let workspace: Workspace
     @ObservedObject var session: Session
+    @State private var editing = false
+    @State private var draft = ""
+    @FocusState private var focused: Bool
     var isActive: Bool { workspace.activeTabID == tab.id }
+    var displayTitle: String { tab.customTitle ?? titlePane.title }
     var body: some View {
         HStack(spacing: 6) {
-            Text(titlePane.title).lineLimit(1).font(.system(size: 12))
+            if editing {
+                TextField("", text: $draft)
+                    .textFieldStyle(.plain).font(.system(size: 12)).frame(minWidth: 60)
+                    .focused($focused).onSubmit { commit() }.onExitCommand { editing = false }
+            } else {
+                Text(displayTitle).lineLimit(1).font(.system(size: 12))
+            }
             Button(action: { session.closeTab(tab.id) }) { Image(systemName: "xmark").font(.system(size: 8)) }
                 .buttonStyle(.plain).opacity(isActive ? 0.9 : 0.4)
         }
@@ -265,6 +291,16 @@ struct TabChip: View {
         .overlay(alignment: .bottom) { if isActive { Rectangle().fill(workspace.accent).frame(height: 2) } }
         .contentShape(Rectangle())
         .onTapGesture { session.selectTab(tab.id) }
+        .contextMenu {
+            Button("名前を変更") { draft = displayTitle; editing = true; DispatchQueue.main.async { focused = true } }
+            if tab.customTitle != nil { Button("自動名に戻す") { tab.customTitle = nil } }
+            Button("タブを閉じる") { session.closeTab(tab.id) }
+        }
+    }
+    private func commit() {
+        let t = draft.trimmingCharacters(in: .whitespaces)
+        tab.customTitle = t.isEmpty ? nil : t
+        editing = false
     }
 }
 
@@ -302,37 +338,41 @@ struct WorkspaceRow: View {
     @ObservedObject var ws: Workspace
     @ObservedObject var session: Session
     @ObservedObject var coord = VoiceCoordinator.shared
-    let index: Int
+    @State private var editing = false
+    @State private var draft = ""
+    @FocusState private var focused: Bool
 
     private var accent: Color { ws.accent }
     private var isActive: Bool { session.activeWorkspaceID == ws.id }
     private var paneIDs: Set<UUID> { Set(ws.paneIDs()) }
     private var isListening: Bool { if let l = coord.listeningPaneID { return paneIDs.contains(l) }; return false }
     private var needsReply: Bool { coord.pending.contains { paneIDs.contains($0.id) } }
-    private var statusColor: Color { needsReply ? .orange : (isListening ? .cyan : .secondary) }
+    private var statusColor: Color { needsReply ? Color.vermGreenSoft : (isListening ? Color.vermGreen : .secondary) }
     private var bg: Color { isActive ? accent.opacity(0.16) : Color.clear }
     private var titleWeight: Font.Weight { isActive ? .semibold : .regular }
     private var statusText: String {
         if isListening { return "🎤 聞き取り中" }
-        if needsReply { return "🟠 返信待ち" }
+        if needsReply { return "● 返信待ち" }
         return ws.allPanes().first?.title ?? "—"
     }
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            Text(index < 9 ? "⌘\(index + 1)" : "")
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                .foregroundColor(.secondary).frame(width: 22, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Circle().fill(accent).frame(width: 7, height: 7)
-                    Text(ws.title).font(.system(size: 12, weight: titleWeight)).lineLimit(1)
+                    if editing {
+                        TextField("", text: $draft).textFieldStyle(.plain).font(.system(size: 12))
+                            .focused($focused).onSubmit { commit() }.onExitCommand { editing = false }
+                    } else {
+                        Text(ws.title).font(.system(size: 12, weight: titleWeight)).lineLimit(1)
+                    }
                 }
                 Text(statusText).font(.system(size: 10)).foregroundColor(statusColor).lineLimit(1)
             }
             Spacer(minLength: 0)
             if needsReply {
-                Button(action: micAction) { Image(systemName: "mic.fill").font(.system(size: 10)).foregroundColor(.orange) }
+                Button(action: micAction) { Image(systemName: "mic.fill").font(.system(size: 10)).foregroundColor(Color.vermGreen) }
                     .buttonStyle(.plain)
             }
         }
@@ -341,6 +381,15 @@ struct WorkspaceRow: View {
         .overlay(alignment: .leading) { if isActive { Rectangle().fill(accent).frame(width: 3) } }
         .contentShape(Rectangle())
         .onTapGesture { session.selectWorkspace(ws.id) }
+        .contextMenu {
+            Button("名前を変更") { draft = ws.title; editing = true; DispatchQueue.main.async { focused = true } }
+            Button("ワークスペースを閉じる") { session.closeWorkspace(ws.id) }
+        }
+    }
+    private func commit() {
+        let t = draft.trimmingCharacters(in: .whitespaces)
+        if !t.isEmpty { ws.title = t }
+        editing = false
     }
     private func micAction() {
         if let id = coord.pending.first(where: { paneIDs.contains($0.id) })?.id { coord.listenSpecific(id) }
@@ -359,8 +408,8 @@ struct Sidebar: View {
             Divider()
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(Array(session.workspaces.enumerated()), id: \.element.id) { i, ws in
-                        WorkspaceRow(ws: ws, session: session, index: i)
+                    ForEach(session.workspaces) { ws in
+                        WorkspaceRow(ws: ws, session: session)
                     }
                 }
             }
@@ -405,9 +454,6 @@ struct ContentView: View {
                 Button(action: { session.sidebarVisible.toggle() }) { Image(systemName: "sidebar.left") }
                     .help("サイドバー ⌘B")
             }
-            ToolbarItem(placement: .navigation) {
-                Text(session.active?.title ?? "").font(.system(size: 13, weight: .semibold))
-            }
         }
         .onAppear {
             coord.start(session: session)
@@ -441,6 +487,8 @@ struct ContentView: View {
         case m == [.command] && ch == "b": session.sidebarVisible.toggle(); return true
         case m == [.command] && ch == "n": session.newWorkspace(); return true
         case m == [.command] && ch == "t": session.newTab(); return true
+        case m == [.command, .shift] && ev.keyCode == 33: session.prevTab(); return true   // ⌘⇧[ 左のタブ
+        case m == [.command, .shift] && ev.keyCode == 30: session.nextTab(); return true   // ⌘⇧] 右のタブ
         case m == [.command] && ch == "d": session.splitFocused(.horizontal); return true
         case m == [.command, .shift] && ch == "d": session.splitFocused(.vertical); return true
         case m == [.command] && ch == "w": session.closeFocused(); return true

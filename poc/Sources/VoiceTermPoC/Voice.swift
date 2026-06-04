@@ -159,7 +159,7 @@ final class VoiceCoordinator: NSObject, ObservableObject, AVAudioPlayerDelegate 
         // NOTE: do NOT change session.focusedPaneID / active workspace+tab here —
         // injection goes straight to the target pane; never steal the user's view.
         pill.model.targetLabel = p.title
-        pill.model.targetColor = color(for: pane)
+        pill.model.targetColor = .vermGreen
         pill.model.phase = .listening
         pill.show()
         NSSound(named: NSSound.Name("Glass"))?.play()
