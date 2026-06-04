@@ -79,7 +79,7 @@ final class Session: ObservableObject {
     @Published var workspaces: [Workspace] = []
     @Published var activeWorkspaceID = UUID()
     @Published var sidebarVisible = true
-    @Published var useGhostty = false      // backend for newly created panes
+    @Published var useGhostty = true       // libghostty is the default (and only) pane backend
     @Published var focusedPaneID: UUID? {
         didSet {  // keep the active workspace following the focused pane (reveal)
             if let id = focusedPaneID, let w = workspace(ofPane: id), w.id != activeWorkspaceID {
@@ -318,20 +318,14 @@ struct ContentView: View {
     }
 
     private var controlBar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Button(action: { session.sidebarVisible.toggle() }) { Image(systemName: "sidebar.left") }
                 .help("サイドバー ⌘B")
             Divider().frame(height: 16)
-            Button("分割 |") { session.splitFocused(.horizontal) }.help("⌘D")
-            Button("分割 —") { session.splitFocused(.vertical) }.help("⌘⇧D")
-            Button("ズーム") { session.toggleZoom() }.help("⌘⇧↩")
-            Toggle("Ghostty", isOn: $session.useGhostty).toggleStyle(.switch).help("新規ペインを libghostty で起動")
-            Divider().frame(height: 16)
             Toggle("単独時自動", isOn: $coord.autoListenSingle).toggleStyle(.switch)
-            Button("🎤 聞く") { coord.hotkeyListenNext() }.help("⌃⌥R（グローバル）")
+            Button("🎤 聞く") { coord.hotkeyListenNext() }.help("⌃D（グローバル）")
             Text(coord.status).foregroundColor(.cyan).lineLimit(1)
             Spacer()
-            Button("🅖 Ghostty試") { openGhosttyTest() }.help("libghostty .exec スパイク")
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
     }
@@ -361,13 +355,6 @@ struct ContentView: View {
         case m == [.command, .shift] && ev.keyCode == 36: session.toggleZoom(); return true        // ⌘⇧↩
         case m == [.command, .option] && (ev.keyCode == 123 || ev.keyCode == 126): session.cyclePane(-1); return true // ⌥⌘←/↑
         case m == [.command, .option] && (ev.keyCode == 124 || ev.keyCode == 125): session.cyclePane(1); return true  // ⌥⌘→/↓
-        case m == [.control] && ev.keyCode == 2:   // ⌃D — voice: start next pending reply; else pass to terminal (EOF)
-            if coord.listeningPaneID == nil && !coord.pending.isEmpty { coord.hotkeyListenNext(); return true }
-            return false
-        case m == [.control] && ev.keyCode == 1:   // ⌃S — voice escape: pause TTS / finish-or-cancel listen; else pass through
-            if coord.speakingNow { coord.toggleTTSPause(); return true }
-            if coord.listeningPaneID != nil { coord.stopCurrentListen(); return true }
-            return false
         case m == [.command]:
             if let c = ch, let d = Int(c), d >= 1 && d <= 9 {
                 if d == 9 { session.selectLast() } else { session.selectIndex(d - 1) }

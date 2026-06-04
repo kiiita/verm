@@ -40,7 +40,8 @@ final class VoiceCoordinator: NSObject, ObservableObject, AVAudioPlayerDelegate 
     private var vadStart = Date()
     private var lastVoice = Date()
     private var currentAudioURL: URL?
-    private var hotkeys: [HotKey] = []
+    private var dHotKey: HotKey?   // ⌃D global: start next reply (claimed only while pending)
+    private var sHotKey: HotKey?   // ⌃S global: pause TTS / finish listen (claimed only while active)
 
     private let speechThreshold: Float = -38
     private let trailingSilence: TimeInterval = 1.6
@@ -55,11 +56,23 @@ final class VoiceCoordinator: NSObject, ObservableObject, AVAudioPlayerDelegate 
         pill.onStop = { [weak self] in self?.hotkeyStopSend() }
         try? FileManager.default.createDirectory(at: Self.eventsDir, withIntermediateDirectories: true)
         watchTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.poll() }
-        hotkeys = [
-            HotKey(keyCode: UInt32(kVK_ANSI_R), modifiers: UInt32(controlKey | optionKey)) { [weak self] in self?.hotkeyListenNext() },
-            HotKey(keyCode: UInt32(kVK_Return), modifiers: UInt32(controlKey | optionKey)) { [weak self] in self?.hotkeyStopSend() },
-            HotKey(keyCode: UInt32(kVK_Escape), modifiers: UInt32(controlKey | optionKey)) { [weak self] in self?.hotkeyCancel() },
-        ]
+    }
+
+    // ⌃D / ⌃S are claimed GLOBALLY (Carbon) only while there's voice work, so
+    // they work from any frontmost app yet stay free for terminals otherwise.
+    private func updateGlobalHotkeys() {
+        let wantD = !pending.isEmpty && micHolder == nil
+        if wantD, dHotKey == nil {
+            dHotKey = HotKey(keyCode: UInt32(kVK_ANSI_D), modifiers: UInt32(controlKey)) { [weak self] in self?.hotkeyListenNext() }
+        } else if !wantD, let d = dHotKey { d.invalidate(); dHotKey = nil }
+
+        let wantS = speakingNow || micHolder != nil
+        if wantS, sHotKey == nil {
+            sHotKey = HotKey(keyCode: UInt32(kVK_ANSI_S), modifiers: UInt32(controlKey)) { [weak self] in self?.ctrlS() }
+        } else if !wantS, let s = sHotKey { s.invalidate(); sHotKey = nil }
+    }
+    private func ctrlS() {
+        if speakingNow { toggleTTSPause() } else if micHolder != nil { stopCurrentListen() }
     }
 
     // MARK: ingest + TTS
@@ -76,6 +89,7 @@ final class VoiceCoordinator: NSObject, ObservableObject, AVAudioPlayerDelegate 
             }
         }
         pumpSpeak()
+        updateGlobalHotkeys()
     }
 
     private func pumpSpeak() {

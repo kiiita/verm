@@ -7,20 +7,28 @@ import Carbon.HIToolbox
 final class HotKey {
     private var ref: EventHotKeyRef?
     private let handler: () -> Void
+    private let idNum: UInt32
     private static var registry: [UInt32: HotKey] = [:]
     private static var nextID: UInt32 = 1
     private static var installed = false
 
     init(keyCode: UInt32, modifiers: UInt32, _ handler: @escaping () -> Void) {
         self.handler = handler
-        let idNum = HotKey.nextID; HotKey.nextID += 1
+        idNum = HotKey.nextID; HotKey.nextID += 1
         HotKey.installHandlerIfNeeded()
         HotKey.registry[idNum] = self
         let hkID = EventHotKeyID(signature: OSType(0x56544B59), id: idNum) // 'VTKY'
         RegisterEventHotKey(keyCode, modifiers, hkID, GetApplicationEventTarget(), 0, &ref)
     }
 
-    deinit { if let r = ref { UnregisterEventHotKey(r) } }
+    // Unregister + release so the key is free for the front app again (dynamic
+    // hotkeys are only claimed while there's voice work to do).
+    func invalidate() {
+        if let r = ref { UnregisterEventHotKey(r); ref = nil }
+        HotKey.registry.removeValue(forKey: idNum)
+    }
+
+    deinit { invalidate() }
 
     private static func installHandlerIfNeeded() {
         guard !installed else { return }
