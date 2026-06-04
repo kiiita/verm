@@ -26,6 +26,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>NSMicrophoneUsageDescription</key><string>音声入力ループのPoCでマイクを使用します。</string>
 </dict>
 </plist>
@@ -40,6 +41,9 @@ mkdir -p "$RDST"
 [ -d "$GRES/terminfo" ]      && cp -R "$GRES/terminfo" "$RDST/"
 [ -d "$GRES/ghostty" ]       && cp -R "$GRES/ghostty" "$RDST/"
 [ -f "$GRES/xterm-ghostty" ] && cp "$GRES/xterm-ghostty" "$RDST/"
+
+# App icon
+[ -f "$DIR/Icon/AppIcon.icns" ] && cp "$DIR/Icon/AppIcon.icns" "$RDST/AppIcon.icns"
 
 codesign --force --sign - "$APP"
 echo "built: $APP"

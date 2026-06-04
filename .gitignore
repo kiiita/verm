@@ -8,3 +8,6 @@ DerivedData/
 
 # macOS
 .DS_Store
+
+# icon build intermediates
+poc/Icon/AppIcon.iconset/

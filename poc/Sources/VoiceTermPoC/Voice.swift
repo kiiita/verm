@@ -56,17 +56,12 @@ final class VoiceCoordinator: NSObject, ObservableObject, AVAudioPlayerDelegate 
         pill.onStop = { [weak self] in self?.hotkeyStopSend() }
         try? FileManager.default.createDirectory(at: Self.eventsDir, withIntermediateDirectories: true)
         watchTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.poll() }
+        // ⌃B is always available globally: toggle voice from any app, even when
+        // nothing is pending (starts listening for the focused pane).
+        bHotKey = HotKey(keyCode: UInt32(kVK_ANSI_B), modifiers: UInt32(controlKey)) { [weak self] in self?.ctrlB() }
     }
 
-    // ⌃D / ⌃S are claimed GLOBALLY (Carbon) only while there's voice work, so
-    // they work from any frontmost app yet stay free for terminals otherwise.
-    private func updateGlobalHotkeys() {
-        let want = !pending.isEmpty || micHolder != nil
-        if want, bHotKey == nil {
-            bHotKey = HotKey(keyCode: UInt32(kVK_ANSI_B), modifiers: UInt32(controlKey)) { [weak self] in self?.ctrlB() }
-        } else if !want, let b = bHotKey { b.invalidate(); bHotKey = nil }
-    }
-    private func ctrlB() {   // toggle: stop if listening, else start the next reply
+    private func ctrlB() {   // toggle: stop if listening, else start (next pending or focused pane)
         if micHolder != nil { stopCurrentListen() } else { hotkeyListenNext() }
     }
 
@@ -84,7 +79,6 @@ final class VoiceCoordinator: NSObject, ObservableObject, AVAudioPlayerDelegate 
             }
         }
         pumpSpeak()
-        updateGlobalHotkeys()
     }
 
     private func pumpSpeak() {
